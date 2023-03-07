@@ -1,0 +1,106 @@
+import json
+import requests
+import logging
+from datetime import datetime
+import mysql.connector
+
+#set up logging
+logging.basicConfig(filename='my-log',
+                    filemode='a',
+                    format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
+                    datefmt='%H:%M:%S',
+                    level=logging.DEBUG)
+                    
+#extract data from API
+headers = {'Accept': 'application/json'}
+url = 'https://api.example.com/sales'
+try:
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+    data_json = response.json()
+    print(f'Data: {data_json}')
+except requests.exceptions.HTTPError as errh:
+    print ("HTTP Error:", errh)
+except requests.exceptions.ConnectionError as errc:
+    print ("Error Connecting:", errc)
+except requests.exceptions.Timeout as errt:
+    print ("Timeout Error:", errt)
+except requests.exceptions.RequestException as err:
+    print ("Something Else:", err)
+   
+#initialize list to store transformed data
+transformed_data = []
+
+#transform data to match data warehouse schema
+try:
+    for sale in sales_data:
+        store_id = sale['store_id']
+        customer_id = sale['customer_id']
+        product_id = sale['product_id']
+        sale_date = datetime.strptime(sale['sale_date'], '%Y-%m-%d').date()
+        sale_amount = sale['sale_amount']
+        store_name = sale['store_name']
+        store_location = sale['store_location']
+        product_name = sale['product_name']
+        product_category = sale['product_category']
+
+        
+        transformed_data.append({
+            'sale_id': sale['sale_id'],
+            'store_id': store_id,
+            'customer_id': customer_id,
+            'product_id': product_id,
+            'sale_date': sale_date,
+            'sale_amount': sale_amount
+        })
+       
+        transformed_data.append({
+            'store_id': store_id,
+            'store_name': store_name,
+            'store_location': store_location
+        })
+       
+        transformed_data.append({
+            'product_id': product_id,
+            'product_name': product_name,
+            'product_category': product_category
+        })
+except (ValueError, KeyError) as e:
+    logging.error(f'Error transforming data: {e}')
+    raise
+    
+#connect to MySQL database
+try:
+    connection = mysql.connector.connect(
+        host='localhost',
+        user='xxx',
+        password='xxx',
+        database='retail_data'
+    )
+except mysql.connector.Error as e:
+    logging.error(f'Error connecting to database: {e}')
+    raise
+    
+#load data into MySQL
+cursor = connection.cursor()
+
+try:
+    cursor.execute(f"INSERT INTO fact_sales (sale_id, store_id, customer_id, product_id, sale_date, sale_amount) VALUES({sale_id}, {store_id}, {customer_id}, {product_id}, '{sale_date}', {sale_amount})")
+except mysql.connector.Error as e:
+    logging.error(f'Error inserting into fact_sales table: {e}')
+    raise
+
+try:
+    cursor.execute(f"INSERT INTO dim_store (store_id, store_name, store_location) VALUES({store_id}, '{store_name}', '{store_location}')")
+except mysql.connector.Error as e:
+    logging.error(f'Error inserting into dim_store table: {e}')
+    raise
+
+try:
+    cursor.execute(f"INSERT INTO dim_product (product_id, product_name, product_category) VALUES({product_id}, '{product_name}', '{product_category}')")
+except mysql.connector.Error as e:
+    logging.error(f'Error inserting into dim_product table: {e}')
+    raise
+
+connection.commit()
+connection.close()
